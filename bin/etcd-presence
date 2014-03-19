@@ -1,0 +1,36 @@
+#!/usr/bin/env python
+#
+# Register a container and host with etcd, and deregister when stopped.
+
+import etcd
+import argparse
+import signal
+import time
+import sys
+
+parser = argparse.ArgumentParser(description="Register the ports of a specfied Docker container with Etcd")
+parser.add_argument("--host", help="The host the container will be registered under", required = True)
+parser.add_argument("--container", help="The container name or id", required = True)
+
+args = parser.parse_args()
+
+etcd_client = etcd.Client(host="172.17.42.1")
+
+print("Registering container {0} on {1}".format(args.container, args.host))
+etcd_client.write("/containers/{0}/hosts/{1}".format(args.container, args.host), 1)
+
+def deregister_func(container, host):
+  def handler(*args, **kwargs):
+    print "Deregistering container {0} on {1}".format(container, host)
+    etcd_client.delete("/containers/{0}/hosts/{1}".format(container, host))
+    sys.exit(0)
+
+  return handler
+
+deregister = deregister_func(args.container, args.host)
+
+signal.signal(signal.SIGTERM, deregister)
+signal.signal(signal.SIGINT, deregister)
+
+while True:
+  time.sleep(5)
